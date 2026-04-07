@@ -1,6 +1,6 @@
 # devops-satc
 
-- Não sei ainda sobre o que é, vou alterar depois.
+- Não sei ainda sobre o que é, vou alterar depois. 
 
   DevOps é o meio termo entre o desenvolvimento e a infra, focado em oferencer velocidade, performance e menores riscos ao projeto.
 
