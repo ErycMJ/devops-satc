@@ -10,3 +10,4 @@
   SRE é uma abordagem em que as tarefas são referenciadas a automação de sistemas para torná-los mais rápidos e seguros
 
 [what-is-sre](https://www.redhat.com/pt-br/topics/devops/what-is-sre)
+
