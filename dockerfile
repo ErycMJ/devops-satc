@@ -5,11 +5,10 @@ RUN apk update && apk upgrade
 WORKDIR /app
 
 COPY devops-front/package*.json ./devops-front/
-
 WORKDIR /app/devops-front
 RUN npm install
 
-COPY . .
+COPY devops-front/ .
 
 RUN npm run build
 
