@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY . .
 
-WORKDIR /app/project
+WORKDIR /app/devops-front
 RUN npm install
 
 RUN npm run build
