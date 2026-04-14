@@ -1,11 +1,17 @@
 FROM node:20-alpine
 
+RUN apk update && apk upgrade
+
 WORKDIR /app
+
+COPY devops-front/package*.json ./devops-front/
+
+WORKDIR /app/devops-front
+RUN npm install
 
 COPY . .
 
-WORKDIR /app/devops-front
-RUN npm install;  npm run build
+RUN npm run build
 
 EXPOSE 4173
 
