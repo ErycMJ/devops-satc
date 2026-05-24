@@ -12,9 +12,60 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_PROJECT_NUMBER: ${{ vars.GCP_PROJECT_NUMBER }}
+      GKE_CLUSTER_NAME: ${{ vars.GKE_CLUSTER_NAME }}
+      GKE_CLUSTER_LOCATION: ${{ vars.GKE_CLUSTER_LOCATION }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validar GCP_PROJECT_ID
+        shell: bash
+        run: |
+          if [[ -z "${GCP_PROJECT_ID}" ]]; then
+            echo "Variavel GCP_PROJECT_ID nao definida."
+            exit 1
+          fi
+          if [[ ! "${GCP_PROJECT_ID}" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]]; then
+            echo "GCP_PROJECT_ID invalido: '${GCP_PROJECT_ID}'"
+            echo "Use um project ID valido do GCP (nao nome/UUID)."
+            exit 1
+          fi
+
+      - name: Diagnostico de variaveis GCP
+        shell: bash
+        run: |
+          if [[ -z "${GCP_PROJECT_NUMBER}" ]]; then
+            echo "GCP_PROJECT_NUMBER: NAO DEFINIDA"
+          else
+            echo "GCP_PROJECT_NUMBER: definida (tamanho=${#GCP_PROJECT_NUMBER})"
+            if [[ "${GCP_PROJECT_NUMBER}" =~ ^[0-9]+$ ]]; then
+              echo "GCP_PROJECT_NUMBER formato: OK (numerico)"
+            else
+              echo "GCP_PROJECT_NUMBER formato: INVALIDO (deve conter apenas numeros)"
+            fi
+          fi
+
+          echo "GCP_PROJECT_ID: definida (tamanho=${#GCP_PROJECT_ID})"
+          if [[ "${GCP_PROJECT_ID}" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]]; then
+            echo "GCP_PROJECT_ID formato: OK"
+          else
+            echo "GCP_PROJECT_ID formato: INVALIDO"
+          fi
+
+          if [[ -z "${GKE_CLUSTER_NAME}" ]]; then
+            echo "GKE_CLUSTER_NAME: NAO DEFINIDA"
+          else
+            echo "GKE_CLUSTER_NAME: definida"
+          fi
+
+          if [[ -z "${GKE_CLUSTER_LOCATION}" ]]; then
+            echo "GKE_CLUSTER_LOCATION: NAO DEFINIDA"
+          else
+            echo "GKE_CLUSTER_LOCATION: definida (${GKE_CLUSTER_LOCATION})"
+          fi
 
       - name: Autenticar no Google Cloud (OIDC)
         id: auth
@@ -22,13 +73,17 @@ jobs:
         with:
           workload_identity_provider: 'projects/${{ vars.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider2'
           service_account: 'gke-deploy-sa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
+          project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Configurar Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Obter credenciais GKE
         uses: google-github-actions/get-gke-credentials@v2
         with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
           cluster_name: ${{ vars.GKE_CLUSTER_NAME }}
           location: ${{ vars.GKE_CLUSTER_LOCATION }}
 
