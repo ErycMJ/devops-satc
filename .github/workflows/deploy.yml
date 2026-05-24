@@ -21,9 +21,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validar GCP_PROJECT_ID
+      - name: Sanitizar e validar variaveis GCP
         shell: bash
         run: |
+          GCP_PROJECT_ID="$(printf '%s' "${GCP_PROJECT_ID}" | tr -d '\r\n' | xargs)"
+          GCP_PROJECT_NUMBER="$(printf '%s' "${GCP_PROJECT_NUMBER}" | tr -d '\r\n' | xargs)"
+          GKE_CLUSTER_NAME="$(printf '%s' "${GKE_CLUSTER_NAME}" | tr -d '\r\n' | xargs)"
+          GKE_CLUSTER_LOCATION="$(printf '%s' "${GKE_CLUSTER_LOCATION}" | tr -d '\r\n' | xargs)"
+
+          echo "GCP_PROJECT_ID=${GCP_PROJECT_ID}" >> "$GITHUB_ENV"
+          echo "GCP_PROJECT_NUMBER=${GCP_PROJECT_NUMBER}" >> "$GITHUB_ENV"
+          echo "GKE_CLUSTER_NAME=${GKE_CLUSTER_NAME}" >> "$GITHUB_ENV"
+          echo "GKE_CLUSTER_LOCATION=${GKE_CLUSTER_LOCATION}" >> "$GITHUB_ENV"
+
           if [[ -z "${GCP_PROJECT_ID}" ]]; then
             echo "Variavel GCP_PROJECT_ID nao definida."
             exit 1
@@ -31,6 +41,10 @@ jobs:
           if [[ ! "${GCP_PROJECT_ID}" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]]; then
             echo "GCP_PROJECT_ID invalido: '${GCP_PROJECT_ID}'"
             echo "Use um project ID valido do GCP (nao nome/UUID)."
+            exit 1
+          fi
+          if [[ -z "${GCP_PROJECT_NUMBER}" || ! "${GCP_PROJECT_NUMBER}" =~ ^[0-9]+$ ]]; then
+            echo "GCP_PROJECT_NUMBER invalido: '${GCP_PROJECT_NUMBER}'"
             exit 1
           fi
 
@@ -87,11 +101,22 @@ jobs:
           cluster_name: ${{ vars.GKE_CLUSTER_NAME }}
           location: ${{ vars.GKE_CLUSTER_LOCATION }}
 
-      - name: Replace vars in deployment.yaml
+      - name: Replace vars nos manifests Kubernetes
+        shell: bash
         run: |
-          sed -i "s|##DOCKER_USERNAME##|${{ secrets.DOCKER_USERNAME }}|g" k8s/deployment.yaml
-          sed -i "s|##K8S_NAMESPACE##|${{ vars.K8S_NAMESPACE }}|g" k8s/deployment.yaml
-          sed -i "s|##K8S_TAG##|${{ github.sha }}|g" k8s/deployment.yaml
+          find k8s -type f \( -name "*.yaml" -o -name "*.yml" \) -print0 | while IFS= read -r -d '' file; do
+            sed -i "s|##DOCKER_USERNAME##|${{ secrets.DOCKER_USERNAME }}|g" "$file"
+            sed -i "s|##K8S_NAMESPACE##|${{ vars.K8S_NAMESPACE }}|g" "$file"
+            sed -i "s|##K8S_TAG##|${{ github.sha }}|g" "$file"
+          done
+
+      - name: Validar placeholders pendentes
+        shell: bash
+        run: |
+          if grep -R -n "##[A-Z0-9_]\+##" k8s/; then
+            echo "Ainda existem placeholders nao substituidos nos manifests."
+            exit 1
+          fi
 
       - name: Criar namespace se não existir
         run: |
@@ -104,3 +129,15 @@ jobs:
       - name: Aguardar rollout do deployment
         run: |
           kubectl rollout status deployment/app-satc -n ${{ vars.K8S_NAMESPACE }} --timeout=300s
+
+      - name: Diagnostico pos-deploy (Deployment/Service/HPA)
+        if: always()
+        shell: bash
+        run: |
+          kubectl get deployment app-satc -n "${{ vars.K8S_NAMESPACE }}" -o wide || true
+          kubectl get pods -n "${{ vars.K8S_NAMESPACE }}" -l app=app-satc -o wide || true
+          kubectl get svc app-satc -n "${{ vars.K8S_NAMESPACE }}" -o wide || true
+          kubectl get hpa app-satc-hpa -n "${{ vars.K8S_NAMESPACE }}" -o wide || true
+          kubectl describe deployment app-satc -n "${{ vars.K8S_NAMESPACE }}" || true
+          kubectl describe hpa app-satc-hpa -n "${{ vars.K8S_NAMESPACE }}" || true
+          kubectl get events -n "${{ vars.K8S_NAMESPACE }}" --sort-by=.metadata.creationTimestamp | tail -n 50 || true
