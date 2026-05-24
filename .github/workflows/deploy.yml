@@ -110,6 +110,22 @@ jobs:
           cluster_name: ${{ vars.GKE_CLUSTER_NAME }}
           location: ${{ vars.GKE_CLUSTER_LOCATION }}
 
+      - name: Validar capacidade do cluster (nodes schedulables)
+        shell: bash
+        run: |
+          TOTAL_NODES="$(kubectl get nodes --no-headers 2>/dev/null | wc -l | xargs)"
+          READY_NODES="$(kubectl get nodes --no-headers 2>/dev/null | grep -c ' Ready ' || true)"
+
+          echo "Nodes totais: ${TOTAL_NODES:-0}"
+          echo "Nodes Ready: ${READY_NODES:-0}"
+
+          if [[ "${TOTAL_NODES:-0}" -lt 1 || "${READY_NODES:-0}" -lt 1 ]]; then
+            echo "Cluster sem nos prontos para agendamento."
+            echo "Verifique node pool, cota/credito e autoscaler do GKE."
+            kubectl get nodes -o wide || true
+            exit 1
+          fi
+
       - name: Replace vars nos manifests Kubernetes
         shell: bash
         run: |
