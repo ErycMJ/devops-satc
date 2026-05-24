@@ -176,6 +176,8 @@ jobs:
           echo "Deployment nao atingiu disponibilidade minima. Falhando pipeline."
           kubectl describe deployment app-satc -n "${K8S_NAMESPACE}" || true
           kubectl get pods -n "${K8S_NAMESPACE}" -l app=app-satc -o wide || true
+          kubectl describe pods -n "${K8S_NAMESPACE}" -l app=app-satc || true
+          kubectl get nodes -o wide || true
           exit 1
 
       - name: Diagnostico pos-deploy (Deployment/Service/HPA)
@@ -187,5 +189,7 @@ jobs:
           kubectl get svc app-satc -n "${K8S_NAMESPACE}" -o wide || true
           kubectl get hpa app-satc-hpa -n "${K8S_NAMESPACE}" -o wide || true
           kubectl describe deployment app-satc -n "${K8S_NAMESPACE}" || true
+          kubectl describe pods -n "${K8S_NAMESPACE}" -l app=app-satc || true
           kubectl describe hpa app-satc-hpa -n "${K8S_NAMESPACE}" || true
+          kubectl get nodes -o wide || true
           kubectl get events -n "${K8S_NAMESPACE}" --sort-by=.metadata.creationTimestamp | tail -n 50 || true
