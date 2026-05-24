@@ -17,6 +17,7 @@ jobs:
       GCP_PROJECT_NUMBER: ${{ vars.GCP_PROJECT_NUMBER }}
       GKE_CLUSTER_NAME: ${{ vars.GKE_CLUSTER_NAME }}
       GKE_CLUSTER_LOCATION: ${{ vars.GKE_CLUSTER_LOCATION }}
+      K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,11 +29,13 @@ jobs:
           GCP_PROJECT_NUMBER="$(printf '%s' "${GCP_PROJECT_NUMBER}" | tr -d '\r\n' | xargs)"
           GKE_CLUSTER_NAME="$(printf '%s' "${GKE_CLUSTER_NAME}" | tr -d '\r\n' | xargs)"
           GKE_CLUSTER_LOCATION="$(printf '%s' "${GKE_CLUSTER_LOCATION}" | tr -d '\r\n' | xargs)"
+          K8S_NAMESPACE="$(printf '%s' "${K8S_NAMESPACE}" | tr -d '\r\n' | xargs | tr '_' '-')"
 
           echo "GCP_PROJECT_ID=${GCP_PROJECT_ID}" >> "$GITHUB_ENV"
           echo "GCP_PROJECT_NUMBER=${GCP_PROJECT_NUMBER}" >> "$GITHUB_ENV"
           echo "GKE_CLUSTER_NAME=${GKE_CLUSTER_NAME}" >> "$GITHUB_ENV"
           echo "GKE_CLUSTER_LOCATION=${GKE_CLUSTER_LOCATION}" >> "$GITHUB_ENV"
+          echo "K8S_NAMESPACE=${K8S_NAMESPACE}" >> "$GITHUB_ENV"
 
           if [[ -z "${GCP_PROJECT_ID}" ]]; then
             echo "Variavel GCP_PROJECT_ID nao definida."
@@ -45,6 +48,11 @@ jobs:
           fi
           if [[ -z "${GCP_PROJECT_NUMBER}" || ! "${GCP_PROJECT_NUMBER}" =~ ^[0-9]+$ ]]; then
             echo "GCP_PROJECT_NUMBER invalido: '${GCP_PROJECT_NUMBER}'"
+            exit 1
+          fi
+          if [[ -z "${K8S_NAMESPACE}" || ! "${K8S_NAMESPACE}" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
+            echo "K8S_NAMESPACE invalido: '${K8S_NAMESPACE}'"
+            echo "Use apenas minusculas, numeros e hifen."
             exit 1
           fi
 
@@ -80,6 +88,7 @@ jobs:
           else
             echo "GKE_CLUSTER_LOCATION: definida (${GKE_CLUSTER_LOCATION})"
           fi
+          echo "K8S_NAMESPACE efetivo: ${K8S_NAMESPACE}"
 
       - name: Autenticar no Google Cloud (OIDC)
         id: auth
@@ -106,7 +115,7 @@ jobs:
         run: |
           find k8s -type f \( -name "*.yaml" -o -name "*.yml" \) -print0 | while IFS= read -r -d '' file; do
             sed -i "s|##DOCKER_USERNAME##|${{ secrets.DOCKER_USERNAME }}|g" "$file"
-            sed -i "s|##K8S_NAMESPACE##|${{ vars.K8S_NAMESPACE }}|g" "$file"
+            sed -i "s|##K8S_NAMESPACE##|${K8S_NAMESPACE}|g" "$file"
             sed -i "s|##K8S_TAG##|${{ github.sha }}|g" "$file"
           done
 
@@ -120,24 +129,24 @@ jobs:
 
       - name: Criar namespace se não existir
         run: |
-          kubectl create namespace ${{ vars.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace "${K8S_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Aplicar manifests Kubernetes
         run: |
-          kubectl apply -f k8s/ -n ${{ vars.K8S_NAMESPACE }}
+          kubectl apply -f k8s/ -n "${K8S_NAMESPACE}"
 
       - name: Aguardar rollout do deployment
         run: |
-          kubectl rollout status deployment/app-satc -n ${{ vars.K8S_NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/app-satc -n "${K8S_NAMESPACE}" --timeout=300s
 
       - name: Diagnostico pos-deploy (Deployment/Service/HPA)
         if: always()
         shell: bash
         run: |
-          kubectl get deployment app-satc -n "${{ vars.K8S_NAMESPACE }}" -o wide || true
-          kubectl get pods -n "${{ vars.K8S_NAMESPACE }}" -l app=app-satc -o wide || true
-          kubectl get svc app-satc -n "${{ vars.K8S_NAMESPACE }}" -o wide || true
-          kubectl get hpa app-satc-hpa -n "${{ vars.K8S_NAMESPACE }}" -o wide || true
-          kubectl describe deployment app-satc -n "${{ vars.K8S_NAMESPACE }}" || true
-          kubectl describe hpa app-satc-hpa -n "${{ vars.K8S_NAMESPACE }}" || true
-          kubectl get events -n "${{ vars.K8S_NAMESPACE }}" --sort-by=.metadata.creationTimestamp | tail -n 50 || true
+          kubectl get deployment app-satc -n "${K8S_NAMESPACE}" -o wide || true
+          kubectl get pods -n "${K8S_NAMESPACE}" -l app=app-satc -o wide || true
+          kubectl get svc app-satc -n "${K8S_NAMESPACE}" -o wide || true
+          kubectl get hpa app-satc-hpa -n "${K8S_NAMESPACE}" -o wide || true
+          kubectl describe deployment app-satc -n "${K8S_NAMESPACE}" || true
+          kubectl describe hpa app-satc-hpa -n "${K8S_NAMESPACE}" || true
+          kubectl get events -n "${K8S_NAMESPACE}" --sort-by=.metadata.creationTimestamp | tail -n 50 || true
