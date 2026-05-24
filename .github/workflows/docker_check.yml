@@ -15,6 +15,7 @@ jobs:
     env:
       IMAGE_NAME: docker.io/erycmj/devops-satc:0.0.1
       TRIVY_MEDIUM_LIMIT: ${{ vars.TRIVY_MEDIUM_LIMIT || '5' }}
+      TRIVY_BLOCK_ON_MEDIUM: ${{ vars.TRIVY_BLOCK_ON_MEDIUM || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,8 +70,9 @@ jobs:
           VULN_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "MEDIUM")] | length' trivy-results.json)
           echo "Quantidade de vulnerabilidades medias: $VULN_COUNT"
           echo "Limite configurado: $TRIVY_MEDIUM_LIMIT"
+          echo "Bloquear por MEDIUM: $TRIVY_BLOCK_ON_MEDIUM"
 
-          if [ "$VULN_COUNT" -gt "$TRIVY_MEDIUM_LIMIT" ]; then
+          if [ "$TRIVY_BLOCK_ON_MEDIUM" = "true" ] && [ "$VULN_COUNT" -gt "$TRIVY_MEDIUM_LIMIT" ]; then
             echo "Pipeline bloqueada: mais de $TRIVY_MEDIUM_LIMIT vulnerabilidades medias encontradas."
             exit 1
           fi

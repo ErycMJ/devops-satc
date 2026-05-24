@@ -132,8 +132,25 @@ jobs:
           kubectl create namespace "${K8S_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Aplicar manifests Kubernetes
+        shell: bash
         run: |
-          kubectl apply -f k8s/ -n "${K8S_NAMESPACE}"
+          kubectl apply -f k8s/deployment.yaml -n "${K8S_NAMESPACE}"
+          kubectl apply -f k8s/hpa.yaml -n "${K8S_NAMESPACE}"
+
+      - name: Aplicar Ingress (quando nginx estiver pronto)
+        shell: bash
+        run: |
+          if kubectl -n ingress-nginx get svc ingress-nginx-controller-admission >/dev/null 2>&1; then
+            ENDPOINTS="$(kubectl -n ingress-nginx get endpoints ingress-nginx-controller-admission -o jsonpath='{.subsets[*].addresses[*].ip}' || true)"
+            if [[ -n "${ENDPOINTS}" ]]; then
+              echo "Ingress NGINX admission pronto. Aplicando ingress."
+              kubectl apply -f k8s/ingress.yaml -n "${K8S_NAMESPACE}"
+            else
+              echo "Ingress NGINX admission sem endpoints. Pulando apply do ingress por enquanto."
+            fi
+          else
+            echo "Namespace/servico ingress-nginx nao encontrado. Pulando apply do ingress."
+          fi
 
       - name: Aguardar rollout do deployment
         run: |
